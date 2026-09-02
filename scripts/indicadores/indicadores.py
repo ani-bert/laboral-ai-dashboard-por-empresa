@@ -122,3 +122,83 @@ def crear_grafico_barras(
     )
 
     return fig
+
+# ============================================================
+# ESTANDARIZAR MODALIDADES PARA VISUALIZACIÓN
+# ============================================================
+
+def normalizar_modalidades(serie):
+    """
+    Unifica las modalidades sin modificar el dataset original.
+    Conserva las categorías desconocidas y etiqueta los nulos.
+    """
+
+    modalidades = (
+        serie.astype("string")
+        .str.strip()
+        .str.lower()
+    )
+
+    return (
+        modalidades
+        .replace({
+            "hibrido": "Híbrido",
+            "híbrido": "Híbrido",
+            "presencial": "Presencial",
+            "remoto": "Remoto",
+            "": "Sin especificar"
+        })
+        .fillna("Sin especificar")
+    )
+
+
+# ============================================================
+# KPIS DE LA VISTA SELECCIONADA
+# ============================================================
+
+def calcular_kpis_empresa(
+    ofertas,
+    postulaciones,
+    columna_id_postulacion="_id_application"
+):
+    """
+    Recibe las ofertas y postulaciones previamente filtradas.
+
+    Cuenta identificadores únicos para evitar que los cruces
+    incrementen artificialmente los totales.
+
+    No elimina filas ni modifica las tablas recibidas.
+    """
+
+    total_ofertas = ofertas["_id"].nunique()
+
+    estados = (
+        ofertas["status"]
+        .astype("string")
+        .str.strip()
+        .str.upper()
+    )
+
+    ofertas_abiertas = ofertas.loc[
+        estados.eq("OPEN").fillna(False),
+        "_id"
+    ].nunique()
+
+    if postulaciones.empty:
+        total_postulaciones = 0
+    else:
+        if columna_id_postulacion not in postulaciones.columns:
+            raise ValueError(
+                "Falta la columna identificadora de postulaciones: "
+                f"{columna_id_postulacion}"
+            )
+
+        total_postulaciones = (
+            postulaciones[columna_id_postulacion].nunique()
+        )
+
+    return {
+        "total_ofertas": int(total_ofertas),
+        "ofertas_abiertas": int(ofertas_abiertas),
+        "total_postulaciones": int(total_postulaciones)
+    }
