@@ -670,11 +670,57 @@ def constructor():
         errors="coerce"
     )
 
-    # ========================================================
-    # 5. ELIMINAR INCONSISTENCIAS TEMPORALES
+     # ========================================================
+    # 5. CORRECCIÓN DE FECHA DE UNA OFERTA ESPECÍFICA
     # ========================================================
 
-    fechas_invalidas = (
+    filas_antes = len(jobs_clean)
+
+    # Identificar únicamente la oferta corregida en Google Colab
+    condicion_registro = (
+        jobs_clean["_id"]
+        .astype(str)
+        .eq("6a5ecc649e10ebf257a0baf8")
+    )
+
+    print(
+        "\nRegistros seleccionados:",
+        int(condicion_registro.sum())
+    )
+
+    print("\nRegistro antes de la corrección:")
+
+    print(
+        jobs_clean.loc[
+            condicion_registro,
+            ["_id", "title", "createdAt", "publishUntil"]
+        ].to_string(index=False)
+    )
+
+    # Misma regla de Colab:
+    # fecha de creación a medianoche + 30 días
+    jobs_clean.loc[
+        condicion_registro,
+        "publishUntil"
+    ] = (
+        jobs_clean.loc[
+            condicion_registro,
+            "createdAt"
+        ].dt.normalize()
+        + pd.Timedelta(days=30)
+    )
+
+    print("\nRegistro después de la corrección:")
+
+    print(
+        jobs_clean.loc[
+            condicion_registro,
+            ["_id", "title", "createdAt", "publishUntil"]
+        ].to_string(index=False)
+    )
+
+    # Revisar las fechas sin eliminar ninguna fila
+    fechas_inconsistentes = (
         jobs_clean["publishUntil"].notna()
         & jobs_clean["createdAt"].notna()
         & (
@@ -683,15 +729,20 @@ def constructor():
         )
     )
 
-    jobs_clean = jobs_clean.loc[
-        ~fechas_invalidas
-    ].copy()
-
-    jobs_clean.reset_index(
-        drop=True,
-        inplace=True
+    print(
+        "\nFechas inconsistentes restantes:",
+        int(fechas_inconsistentes.sum())
     )
 
+    print("Filas antes:", filas_antes)
+    print("Filas después:", len(jobs_clean))
+
+    assert len(jobs_clean) == filas_antes, (
+        "La cantidad de ofertas cambió durante la corrección."
+    )
+
+    print("No se eliminó ninguna fila en esta corrección.")
+    
     # ========================================================
     # 6. LIMPIEZA DE APPLICATIONS
     # ========================================================
