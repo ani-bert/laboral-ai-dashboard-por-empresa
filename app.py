@@ -2,6 +2,11 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import ast
+import re
+import requests
+import unicodedata
+from collections import Counter
 from scripts.constructor import constructor
 
 st.set_page_config(page_title="Exploración por empresa | Laboral.ai",
@@ -12,6 +17,12 @@ VERDE_BARRA = "#A6C263"
 CELESTE_BARRA = "#66C7D1"
 AMARILLO_BARRA = "#FFDE59"
 MORADO_BARRA = "#754480"
+
+PERU_GEOJSON_URL = (
+    "https://raw.githubusercontent.com/"
+    "juaneladio/peru-geojson/master/"
+    "peru_departamental_simple.geojson"
+)
 
 # Estilos separados para el contenido blanco y la barra lateral azul.
 st.markdown("""
@@ -143,7 +154,8 @@ def preparar_modelo(companies, jobs, applications):
     ofertas = asegurar_columnas(jobs, [
         "_id", "companyId", "externalCompanyName", "isExternalOffer",
         "createdAt", "publishUntil", "status", "professionalArea",
-        "modality", "title", "jobType", "geographicDepartment", "country"
+        "modality", "title", "jobType", "geographicDepartment", "country",
+        "requirements"
     ])
     postulaciones = asegurar_columnas(
         applications, ["_id", "job", "createdAt", "applicationStatus"]
@@ -292,6 +304,247 @@ def detalle_ofertas(ofertas, postulaciones):
         "Ubicación", "Estado", "Fecha de creación", "Vencimiento",
         "Postulaciones"
     ]]
+
+
+# Reglas transparentes para agrupar distintas formas de escribir un mismo
+# requisito. Una frase puede pertenecer a más de una categoría.
+REGLAS_REQUISITOS = {
+    "Experiencia laboral": [r"\bexperiencia\b", r"\bexperiencia previa\b"],
+    "Formación académica": [
+        r"\bestudiante\b", r"\begresad[oa]s?\b", r"\bbachiller\b",
+        r"\btitulado\b", r"\buniversitari[oa]s?\b", r"\btecnic[oa]s?\b"
+    ],
+    "Excel": [r"\bexcel\b", r"\bhojas? de calculo\b"],
+    "Microsoft Office": [
+        r"\bmicrosoft office\b", r"\bms office\b", r"\boffice\b", r"\bofimatica\b",
+    ],
+    "Word": [r"\bmicrosoft word\b", r"\bms word\b", r"\bword\b"],
+    "PowerPoint": [
+        r"\bmicrosoft powerpoint\b", r"\bpowerpoint\b",
+        r"\bpower point\b", r"\bppt\b"
+    ],
+    "Power BI": [r"\bpower\s*bi\b", r"\bpowerbi\b"],
+    "Google Analytics": [r"\bgoogle analytics\b", r"\bga4\b"],
+    "Inglés": [r"\bingles\b", r"\benglish\b"],
+    "Comunicación": [
+        r"\bcomunicacion\b", r"\bfacilidad de palabra\b",
+        r"\bcomunicacion efectiva\b", r"\bcomunicacion asertiva\b"
+    ],
+    "Trabajo en equipo": [
+        r"\btrabajo en equipo\b", r"\btrabajo colaborativo\b",
+        r"\bcolaboracion\b"
+    ],
+    "Disponibilidad": [
+        r"\bdisponibilidad\b", r"\bdisponible\b",
+        r"\bincorporacion inmediata\b"
+    ],
+    "Ventas": [
+        r"\bventas?\b", r"\bcomercial\b", r"\bnegociacion\b",
+        r"\bcierre de ventas\b"
+    ],
+    "Atención al cliente": [
+        r"\batencion al cliente\b", r"\bservicio al cliente\b",
+        r"\bexperiencia del cliente\b"
+    ],
+    "Análisis de datos": [
+        r"\banalisis de datos\b", r"\banalitica de datos\b",
+        r"\bdata analytics\b"
+    ],
+    "SQL": [r"\bsql\b(?!\s*server)"],
+    "SQL Server": [r"\bsql\s*server\b"],
+    "MySQL": [r"\bmysql\b"],
+    "PostgreSQL": [r"\bpostgresql\b", r"\bpostgres\b"],
+    "Python": [r"\bpython\b"],
+    "Marketing digital": [
+        r"\bmarketing digital\b", r"\bgoogle ads\b", r"\bmeta ads\b",
+        r"\bpublicidad digital\b"
+    ],
+    "Redes sociales": [
+        r"\bredes sociales\b", r"\bsocial media\b", r"\bcommunity manager\b"
+    ],
+    "Canva": [r"\bcanva\b"],
+    "SAP": [r"\bsap\b", r"\bsap business one\b"],
+    "ERP": [r"\berp\b", r"\berps\b", r"\bodoo\b"],
+    "Photoshop": [r"\bphotoshop\b"],
+    "Illustrator": [r"\billustrator\b"],
+    "Premiere Pro": [r"\bpremiere\b", r"\bpremiere pro\b"],
+    "AutoCAD": [r"\bautocad\b"],
+    "CRM": [r"\bcrm\b", r"\bhubspot\b", r"\bsalesforce\b"],
+    "Figma": [r"\bfigma\b"],
+    "Tableau": [r"\btableau\b"],
+    "Looker Studio": [r"\blooker studio\b"],
+    "Google Ads": [r"\bgoogle ads\b"],
+    "Meta Ads": [r"\bmeta ads\b", r"\bfacebook ads\b"],
+    "TikTok Ads": [r"\btiktok ads\b"],
+    "Power Query": [r"\bpower query\b"],
+    "Azure": [r"\bazure\b"],
+    "AWS": [r"\baws\b", r"\bamazon web services\b"],
+    "Git/GitHub": [r"\bgit\b", r"\bgithub\b"],
+    "Java": [r"\bjava\b"],
+    "JavaScript": [r"\bjavascript\b", r"\btypescript\b"],
+    "Proactividad": [r"\bproactiv[oa]\b", r"\bproactividad\b", r"\biniciativa\b"],
+    "Organización": [
+        r"\borganizacion\b", r"\bplanificacion\b", r"\bgestion del tiempo\b"
+    ],
+    "Liderazgo": [r"\bliderazgo\b", r"\bliderar\b"]
+}
+
+HERRAMIENTAS_TECNICAS = {
+    "Excel", "Microsoft Office", "Power BI", "Google Analytics",
+    "Word", "PowerPoint", "SQL", "SQL Server", "MySQL", "PostgreSQL",
+    "Python", "Canva", "SAP", "ERP", "Photoshop",
+    "Illustrator", "Premiere Pro", "AutoCAD", "CRM", "Figma",
+    "Tableau", "Looker Studio", "Google Ads", "Meta Ads", "TikTok Ads",
+    "Power Query", "Azure", "AWS", "Git/GitHub", "Java", "JavaScript"
+}
+
+def extraer_textos_requisitos(valor):
+    """Extrae los textos sin modificar la columna original."""
+    if valor is None or (not isinstance(valor, (list, dict)) and pd.isna(valor)):
+        return []
+    if isinstance(valor, str):
+        try:
+            valor = ast.literal_eval(valor)
+        except (ValueError, SyntaxError):
+            return [valor]
+    if isinstance(valor, dict):
+        valor = [valor]
+    if not isinstance(valor, list):
+        return [str(valor)]
+    textos = []
+    for requisito in valor:
+        texto = requisito.get("text") if isinstance(requisito, dict) else requisito
+        if texto is not None and str(texto).strip():
+            textos.append(str(texto))
+    return textos
+
+
+def normalizar_termino(texto):
+    texto = unicodedata.normalize("NFKD", str(texto).casefold())
+    return "".join(letra for letra in texto if not unicodedata.combining(letra))
+
+
+def top_terminos_requisitos(ofertas, limite=10):
+    """Cuenta en cuántas ofertas aparece cada requisito normalizado."""
+    conteos = Counter()
+    ofertas_con_requisitos = 0
+    for valor in ofertas["requirements"]:
+        textos = extraer_textos_requisitos(valor)
+        if not textos:
+            continue
+        categorias_oferta = set()
+        for texto in textos:
+            limpio = normalizar_termino(texto)
+            for categoria in HERRAMIENTAS_TECNICAS:
+                patrones = REGLAS_REQUISITOS[categoria]
+                if any(re.search(patron, limpio) for patron in patrones):
+                    categorias_oferta.add(categoria)
+        if categorias_oferta:
+            ofertas_con_requisitos += 1
+            conteos.update(categorias_oferta)
+    tabla = pd.DataFrame(
+        conteos.most_common(limite), columns=["Término", "Ofertas"]
+    )
+    return tabla, ofertas_con_requisitos
+
+
+@st.cache_data(show_spinner=False)
+def cargar_geojson_peru():
+    respuesta = requests.get(PERU_GEOJSON_URL, timeout=30)
+    respuesta.raise_for_status()
+    return respuesta.json()
+
+
+def grafico_mapa_ofertas(ofertas):
+    """Muestra la cantidad de ofertas filtradas por departamento del Perú."""
+    if ofertas.empty:
+        st.info("No hay ofertas para construir el mapa.")
+        return
+
+    departamentos = texto_limpio(
+        ofertas["geographicDepartment"]
+    ).dropna()
+    if departamentos.empty:
+        st.info("Las ofertas seleccionadas no tienen departamento registrado.")
+        return
+
+    conteos = (
+        departamentos.map(normalizar_termino)
+        .value_counts()
+        .rename_axis("Departamento")
+        .reset_index(name="Ofertas")
+    )
+
+    try:
+        geojson = cargar_geojson_peru()
+        for feature in geojson.get("features", []):
+            propiedades = feature.setdefault("properties", {})
+            propiedades["DEPARTAMENTO_NORMALIZADO"] = normalizar_termino(
+                propiedades.get("NOMBDEP", "")
+            )
+
+        mapa = pd.DataFrame({
+            "Departamento": [
+                feature.get("properties", {}).get(
+                    "DEPARTAMENTO_NORMALIZADO", ""
+                )
+                for feature in geojson.get("features", [])
+            ],
+            "Nombre": [
+                feature.get("properties", {}).get("NOMBDEP", "")
+                for feature in geojson.get("features", [])
+            ]
+        }).drop_duplicates("Departamento")
+
+        mapa = mapa.merge(conteos, on="Departamento", how="left")
+        mapa["Ofertas"] = mapa["Ofertas"].fillna(0).astype(int)
+
+        fig = px.choropleth(
+            mapa,
+            geojson=geojson,
+            locations="Departamento",
+            featureidkey="properties.DEPARTAMENTO_NORMALIZADO",
+            color="Ofertas",
+            color_continuous_scale=[
+                [0.00, "#EEF2F6"], [0.15, "#D4F0F3"],
+                [0.40, "#66C7D1"], [0.70, "#0A99AD"],
+                [1.00, "#077F8F"]
+            ],
+            hover_name="Nombre",
+            hover_data={
+                "Ofertas": True, "Departamento": False, "Nombre": False
+            }
+        )
+        fig.update_traces(
+            marker_line_color="#FFFFFF",
+            marker_line_width=1.2,
+            hovertemplate=(
+                "<b>%{hovertext}</b><br>Ofertas: <b>%{z}</b><extra></extra>"
+            )
+        )
+        fig.update_geos(
+            fitbounds="geojson", visible=False, showcountries=False,
+            showcoastlines=False, showland=False, showframe=False,
+            bgcolor="rgba(0,0,0,0)"
+        )
+        fig.update_layout(
+            height=560, paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)", margin=dict(l=0, r=0, t=55, b=0),
+            coloraxis_colorbar=dict(
+                title="Ofertas", orientation="h", x=0.5, xanchor="center",
+                y=1.02, yanchor="bottom", len=0.62, thickness=12,
+                outlinewidth=0
+            )
+        )
+        st.plotly_chart(
+            fig, use_container_width=True, theme=None, key="mapa_ofertas",
+            config={
+                "displayModeBar": False, "responsive": True,
+                "scrollZoom": False
+            }
+        )
+    except requests.RequestException:
+        st.warning("No se pudo cargar el mapa departamental del Perú.")
 
 
 # ============================================================
@@ -750,6 +1003,34 @@ def main():
                     key="ranking_ofertas",
                     config={"displayModeBar": False}
                 )
+
+    with st.container(border=True):
+        st.subheader("Distribución geográfica de las ofertas")
+        st.caption(
+            "Cantidad de ofertas laborales por departamento del Perú."
+        )
+        grafico_mapa_ofertas(vista)
+
+    with st.container(border=True):
+        st.subheader("Top 10 de herramientas y programas más solicitados")
+        ranking_requisitos, ofertas_con_requisitos = top_terminos_requisitos(
+            vista, limite=10
+        )
+        if ranking_requisitos.empty:
+            st.info("No hay requisitos registrados para esta selección.")
+        else:
+            barras(
+                ranking_requisitos,
+                "Término",
+                "Ofertas",
+                "#e35693",
+                "ranking_requisitos"
+            )
+            st.caption(
+                f"{formato_numero(ofertas_con_requisitos)} ofertas mencionan "
+                "al menos una herramienta identificada. Cada herramienta se "
+                "cuenta una sola vez por oferta."
+            )
 
     st.subheader("Detalle de ofertas")
     ordenadas = vista.sort_values("createdAt", ascending=False, na_position="last")
