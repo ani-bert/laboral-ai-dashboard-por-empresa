@@ -991,9 +991,8 @@ def main():
                         ],
                         hovertemplate=(
                             "%{customdata[0]}<br>"
-                            "Postulaciones: %{x}<br>"
-                            "ID: %{customdata[1]}"
-                            "<extra></extra>"
+                            "Postulaciones: %{x}"
+                             "<extra></extra>"
                         )
                     )
                 )
