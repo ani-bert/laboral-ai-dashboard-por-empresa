@@ -922,11 +922,11 @@ def main():
     c1, c2 = st.columns(2, gap="large")
     with c1:
         with st.container(border=True):
-            st.subheader("Ofertas publicadas por mes")
+            st.subheader("Evolución del total de ofertas publicadas")
             grafico_mensual(vista, AZUL_LINEA, "ofertas_mes")
     with c2:
         with st.container(border=True):
-            st.subheader("Postulaciones por mes")
+            st.subheader("Evolución del total de postulaciones")
             grafico_mensual(solicitudes, AZUL_LINEA, "postulaciones_mes")
 
     detalle_ranking = detalle_ofertas(vista, solicitudes)
