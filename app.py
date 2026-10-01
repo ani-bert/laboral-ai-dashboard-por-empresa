@@ -105,6 +105,7 @@ from scripts.indicadores.indicadores import (
 TODAS = "__todas__"
 SIN_EMPRESA = "__sin_empresa__"
 AREA_TODAS = "__todas_areas__"
+REGION_TODAS = "__todas_regiones__"
 
 
 def texto_limpio(serie):
@@ -248,8 +249,10 @@ def preparar_modelo(companies, jobs, applications):
     return directorio, ofertas, postulaciones
 
 
+
 def filtrar_datos(ofertas, postulaciones, empresa=TODAS,
-                  area=AREA_TODAS, inicio=None, fin=None, tipo="Todas"):
+                  area=AREA_TODAS, region=REGION_TODAS,
+                  inicio=None, fin=None, tipo="Todas"):
     """Un rango filtra por creación de OFERTAS, no por fecha de postulación."""
     mascara = pd.Series(True, index=ofertas.index)
     if tipo != "Todas":
@@ -258,6 +261,8 @@ def filtrar_datos(ofertas, postulaciones, empresa=TODAS,
         mascara &= ofertas["empresa_clave"].eq(empresa)
     if area != AREA_TODAS:
         mascara &= ofertas["area_visual"].eq(area)
+    if region != REGION_TODAS:
+        mascara &= ofertas["geographicDepartment"].eq(region)
     if inicio is not None and fin is not None:
         desde = pd.Timestamp(inicio, tz="UTC")
         hasta = pd.Timestamp(fin, tz="UTC") + pd.Timedelta(days=1)
@@ -268,10 +273,16 @@ def filtrar_datos(ofertas, postulaciones, empresa=TODAS,
     vista = ofertas.loc[mascara.fillna(False)].copy()
 
     # La vista global completa conserva incluso postulaciones sin oferta.
+    
     sin_restricciones = (
-        empresa == TODAS and area == AREA_TODAS
-        and inicio is None and fin is None and tipo == "Todas"
+        empresa == TODAS
+        and area == AREA_TODAS
+        and region == REGION_TODAS
+        and inicio is None
+        and fin is None
+        and tipo == "Todas"
     )
+    
     if sin_restricciones:
         solicitudes = postulaciones.copy()
     else:
@@ -696,6 +707,7 @@ def limpiar_filtros_empresa():
     st.session_state["tipo_empresa_filtro"] = "Todas"
     st.session_state["empresa_filtro"] = TODAS
     st.session_state["area_filtro"] = AREA_TODAS
+    st.session_state["region_filtro"] = REGION_TODAS
     st.session_state["periodo_filtro"] = "Completo"
     for clave in ("fecha_desde", "fecha_hasta"):
         st.session_state.pop(clave, None)
@@ -823,7 +835,19 @@ def main():
             "Área profesional", areas, key="area_filtro",
             format_func=lambda valor: "Todas" if valor == AREA_TODAS else valor
         )
+        regiones = [REGION_TODAS] + sorted(
+            base_empresa["geographicDepartment"]
+            .dropna()
+            .unique()
+            .tolist()
+        )
 
+        region = st.selectbox(
+            "Región",
+            regiones,
+            key="region_filtro",
+            format_func=lambda valor: "Todas" if valor == REGION_TODAS else valor
+        )
         hoy = pd.Timestamp.now(tz="UTC").normalize()
         inicio = fin = None
         if periodo == "Personalizado":
@@ -857,7 +881,7 @@ def main():
         st.stop()
 
     vista, solicitudes = filtrar_datos(
-        ofertas, postulaciones, empresa, area, inicio, fin, tipo
+        ofertas, postulaciones, empresa, area, region, inicio, fin, tipo
     )
     titulo = (
         {"Todas":"Panorama general de empresas", "Internas":"Ofertas internas",
@@ -1004,12 +1028,14 @@ def main():
                     config={"displayModeBar": False}
                 )
 
-    with st.container(border=True):
-        st.subheader("Distribución geográfica de las ofertas")
-        st.caption(
+    if region == REGION_TODAS:
+        with st.container(border=True):
+            st.subheader("Distribución geográfica de las ofertas")
+            st.caption(
             "Cantidad de ofertas laborales por departamento del Perú."
-        )
-        grafico_mapa_ofertas(vista)
+            )
+            grafico_mapa_ofertas(vista)
+
 
     with st.container(border=True):
         st.subheader("Top 10 de herramientas y programas más solicitados")
