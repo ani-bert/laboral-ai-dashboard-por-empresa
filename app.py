@@ -17,6 +17,7 @@ VERDE_BARRA = "#A6C263"
 CELESTE_BARRA = "#66C7D1"
 AMARILLO_BARRA = "#FFDE59"
 MORADO_BARRA = "#754480"
+NARANJA = "#f0901a"
 
 PERU_GEOJSON_URL = (
     "https://raw.githubusercontent.com/"
@@ -1027,6 +1028,110 @@ def main():
                     config={"displayModeBar": False}
                 )
 
+
+    # ============================================================
+    # TIPO DE PUESTO + HERRAMIENTAS
+    # ============================================================
+
+    c1, c2 = st.columns(2, gap="large")
+
+    with c1:
+        with st.container(border=True):
+
+            st.subheader("Ofertas por tipo de puesto")
+
+            st.caption(
+                "Distribución de las ofertas según el nivel o tipo de puesto."
+            )
+
+            if "jobType" in vista.columns and not vista.empty:
+
+                jobtype_df = vista[["jobType"]].copy()
+
+                jobtype_df["jobType"] = (
+                    jobtype_df["jobType"]
+                    .fillna("Sin especificar")
+                    .astype(str)
+                    .str.strip()
+                )
+
+                jobtype_df.loc[
+                    jobtype_df["jobType"] == "",
+                    "jobType"
+                ] = "Sin especificar"
+
+                jobtype_grafico = (
+                    jobtype_df["jobType"]
+                    .value_counts()
+                    .reset_index()
+                )
+
+                jobtype_grafico.columns = [
+                    "Tipo de puesto",
+                    "Cantidad"
+                ]
+
+                jobtype_grafico = (
+                    jobtype_grafico
+                    .sort_values(
+                        "Cantidad",
+                        ascending=True
+                    )
+                )
+
+                barras(
+                    jobtype_grafico,
+                    "Tipo de puesto",
+                    "Cantidad",
+                    NARANJA,
+                    "tipo_puesto"
+                )
+
+            else:
+                st.info(
+                    "No existe información de tipo de puesto "
+                    "para esta selección."
+                )
+
+
+    with c2:
+        with st.container(border=True):
+
+            st.subheader(
+                "Top 10 de herramientas y programas más solicitados"
+            )
+
+            ranking_requisitos, ofertas_con_requisitos = (
+                top_terminos_requisitos(
+                    vista,
+                    limite=10
+                )
+            )
+
+            if ranking_requisitos.empty:
+
+                st.info(
+                    "No hay requisitos registrados "
+                    "para esta selección."
+                )
+
+            else:
+
+                barras(
+                    ranking_requisitos,
+                    "Término",
+                    "Ofertas",
+                    "#e35693",
+                    "ranking_requisitos"
+                )
+
+                st.caption(
+                    f"{formato_numero(ofertas_con_requisitos)} "
+                    "ofertas mencionan al menos una herramienta "
+                    "identificada. Cada herramienta se cuenta "
+                    "una sola vez por oferta."
+                )
+
     if region == REGION_TODAS:
         with st.container(border=True):
             st.subheader("Distribución geográfica de las ofertas")
@@ -1035,27 +1140,6 @@ def main():
             )
             grafico_mapa_ofertas(vista)
 
-
-    with st.container(border=True):
-        st.subheader("Top 10 de herramientas y programas más solicitados")
-        ranking_requisitos, ofertas_con_requisitos = top_terminos_requisitos(
-            vista, limite=10
-        )
-        if ranking_requisitos.empty:
-            st.info("No hay requisitos registrados para esta selección.")
-        else:
-            barras(
-                ranking_requisitos,
-                "Término",
-                "Ofertas",
-                "#e35693",
-                "ranking_requisitos"
-            )
-            st.caption(
-                f"{formato_numero(ofertas_con_requisitos)} ofertas mencionan "
-                "al menos una herramienta identificada. Cada herramienta se "
-                "cuenta una sola vez por oferta."
-            )
 
     st.subheader("Detalle de ofertas")
     ordenadas = vista.sort_values("createdAt", ascending=False, na_position="last")
