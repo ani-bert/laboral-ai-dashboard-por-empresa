@@ -1098,7 +1098,7 @@ def main():
         with st.container(border=True):
 
             st.subheader(
-                "Top 10 de herramientas y programas más solicitados"
+                "Herramientas y programas más solicitados"
             )
 
             ranking_requisitos, ofertas_con_requisitos = (
@@ -1124,12 +1124,17 @@ def main():
                     "#e35693",
                     "ranking_requisitos"
                 )
+                
+                texto_oferta = (
+                    "oferta incluye"
+                    if ofertas_con_requisitos == 1
+                    else "ofertas incluyen"
+                )
 
                 st.caption(
-                    f"{formato_numero(ofertas_con_requisitos)} "
-                    "ofertas mencionan al menos una herramienta "
-                    "identificada. Cada herramienta se cuenta "
-                    "una sola vez por oferta."
+                    f"{formato_numero(ofertas_con_requisitos)} ofertas incluyen "
+                    "al menos una herramienta o programa identificado. "
+                    "Cada herramienta se cuenta una sola vez por oferta."
                 )
 
     if region == REGION_TODAS:
@@ -1164,7 +1169,7 @@ def main():
         )
 
         detalle = detalle.rename(
-            columns={"Área": "Área registrada"}
+            columns={"Área": "Área rprofesional"}
         )
 
     detalle["Ubicación"] = (
