@@ -263,7 +263,20 @@ def filtrar_datos(ofertas, postulaciones, empresa=TODAS,
     if area != AREA_TODAS:
         mascara &= ofertas["area_visual"].eq(area)
     if region != REGION_TODAS:
-        mascara &= ofertas["geographicDepartment"].eq(region)
+        region_oferta = (
+            ofertas["geographicDepartment"]
+            .fillna("Sin especificar")
+            .astype(str)
+            .str.strip()
+            .replace({
+                 "": "Sin especificar",
+                "None": "Sin especificar",
+                "nan": "Sin especificar",
+                "<NA>": "Sin especificar"
+            })
+        )
+
+        mascara &= region_oferta.eq(region)
     if inicio is not None and fin is not None:
         desde = pd.Timestamp(inicio, tz="UTC")
         hasta = pd.Timestamp(fin, tz="UTC") + pd.Timedelta(days=1)
@@ -836,11 +849,21 @@ def main():
             "Área profesional", areas, key="area_filtro",
             format_func=lambda valor: "Todas" if valor == AREA_TODAS else valor
         )
-        regiones = [REGION_TODAS] + sorted(
+        regiones_serie = (
             base_empresa["geographicDepartment"]
-            .dropna()
-            .unique()
-            .tolist()
+            .fillna("Sin especificar")
+            .astype(str)
+            .str.strip()
+            .replace({
+                 "": "Sin especificar",
+                 "None": "Sin especificar",
+                 "nan": "Sin especificar",
+                "<NA>": "Sin especificar"
+            })
+        )
+
+        regiones = [REGION_TODAS] + sorted(
+            regiones_serie.unique().tolist()
         )
 
         region = st.selectbox(
@@ -1132,7 +1155,7 @@ def main():
                 )
 
                 st.caption(
-                    f"{formato_numero(ofertas_con_requisitos)} ofertas incluyen "
+                    f"{formato_numero(ofertas_con_requisitos)}"
                     "al menos una herramienta o programa identificado. "
                     "Cada herramienta se cuenta una sola vez por oferta."
                 )
@@ -1169,7 +1192,7 @@ def main():
         )
 
         detalle = detalle.rename(
-            columns={"Área": "Área rprofesional"}
+            columns={"Área": "Área registrada"}
         )
 
     detalle["Ubicación"] = (
