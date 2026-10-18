@@ -68,13 +68,83 @@ border:1px solid #0B213C !important; border-radius:9px;}
 [data-testid="stNumberInput"] button {background:#D9EEF7 !important; color:#172B40 !important;}
 button[role="tab"] {color:#172B40 !important;}
 button[role="tab"][aria-selected="true"] {color:#176B91 !important;}
-[data-testid="stSidebar"] {background:#0B213C !important;}
-[data-testid="stSidebar"] p, [data-testid="stSidebar"] label,
-[data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {
-color:#FFFFFF !important;}
-[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p {color:#C9DCE9 !important;}
+[data-testid="stSidebar"] {
+    background:#0B213C !important;
+}
+
+/* Centrar automáticamente todo el contenido del sidebar */
+[data-testid="stSidebarContent"] {
+    display: flex !important;
+    flex-direction: column !important;
+    min-height: 100vh !important;
+}
+
+[data-testid="stSidebarContent"] > div {
+    margin-top: auto !important;
+    margin-bottom: auto !important;
+    width: 100% !important;
+}
+
+[data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
+    gap: 1.15rem !important;
+}
+
+[data-testid="stSidebar"] h2 {
+    color:#FFFFFF !important;
+    font-size:24px !important;
+    font-weight:700 !important;
+    margin-bottom:4px !important;
+}
+
+[data-testid="stSidebar"] h3 {
+    color:#FFFFFF !important;
+    font-size:20px !important;
+    font-weight:700 !important;
+    margin-top:18px !important;
+    margin-bottom:10px !important;
+}
+
+[data-testid="stSidebar"] label {
+    color:#FFFFFF !important;
+    font-size:14px !important;
+    font-weight:500 !important;
+}
+
+[data-testid="stSidebar"] p {
+    font-size:13px !important;
+}
+
+
+[data-testid="stSidebar"] div[data-baseweb="select"] > div {
+    min-height:38px !important;
+    height:38px !important;
+    font-size:14px !important;
+    border-radius:10px !important;
+}
+[data-testid="stSidebar"] div[data-baseweb="select"] input {
+    padding-top:0 !important;
+    padding-bottom:0 !important;
+}
+
+[data-testid="stSidebar"] div[data-baseweb="select"] span {
+    font-size:14px !important;
+    line-height:38px !important;
+}
+[data-testid="stSidebar"] div[data-baseweb="select"] span {
+    font-size:14px !important;
+}
+[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p {
+    color:#8FA4B8 !important;
+    font-size:12px !important;
+}
+
 [data-testid="stSidebar"] [data-testid="stButton"] button {
-border:1px solid #90cae0 !important;}
+    min-height:42px !important;
+    font-size:14px !important;
+    border-radius:10px !important;
+    padding:5px 10px !important;
+    border:1px solid #90cae0 !important;
+}
 .tabla-scroll {overflow:auto; max-height:480px; border:1px solid #C1DCE8;
 border-radius:10px; margin-bottom:18px;}
 table.tabla-clara {border-collapse:collapse; width:100%; font-size:14px; color:#172B40;
@@ -157,7 +227,10 @@ def preparar_modelo(companies, jobs, applications):
         "_id", "companyId", "externalCompanyName", "isExternalOffer",
         "createdAt", "publishUntil", "status", "professionalArea",
         "modality", "title", "jobType", "geographicDepartment", "country",
-        "requirements"
+        "requirements",# Nuevos campos
+        "vacancies",
+        "workExperience",
+        "isFeatured"
     ])
     postulaciones = asegurar_columnas(
         applications, ["_id", "job", "createdAt", "applicationStatus"]
@@ -924,48 +997,102 @@ def main():
     kpis = calcular_kpis_empresa(
         vista, solicitudes, columna_id_postulacion="_id"
     )
-    columnas = st.columns(3)
-    for columna, etiqueta, clave in zip(columnas, [
-        "Total de ofertas", "Ofertas abiertas", "Postulaciones registradas"
-    ], ["total_ofertas", "ofertas_abiertas", "total_postulaciones"]):
-        columna.metric(etiqueta, formato_numero(kpis[clave]))
+    columnas = st.columns(4)
+
+    columnas[0].metric(
+        "Total de ofertas",
+        formato_numero(kpis["total_ofertas"])
+    )
+
+    columnas[1].metric(
+        "Vacantes disponibles",
+        formato_numero(kpis["vacantes_reales"])
+    )
+
+    columnas[2].metric(
+        "Ofertas abiertas",
+        formato_numero(kpis["ofertas_abiertas"])
+    )
+
+    columnas[3].metric(
+        "Postulaciones registradas",
+        formato_numero(kpis["total_postulaciones"])
+    )
 
     if vista.empty:
         st.info("No hay ofertas para esta selección. Puedes limpiar los filtros.")
 
-    # Una sola vista: seis gráficos y detalle, sin pestañas ni directorio.
+    # ============================================================
+    # FILA 1
+    # ============================================================
+
     c1, c2 = st.columns(2, gap="large")
+
     with c1:
         with st.container(border=True):
             st.subheader("Ofertas por modalidad de trabajo")
             grafico_modalidades(vista)
+
     with c2:
         with st.container(border=True):
             st.subheader("Ofertas por área profesional")
-            grafico_categorias(vista, "area_visual", VERDE_BARRA, "areas")
+            grafico_categorias(
+                vista,
+                "area_visual",
+                VERDE_BARRA,
+                "areas"
+            )
+
+    # ============================================================
+    # FILA 2
+    # ============================================================
+
     c1, c2 = st.columns(2, gap="large")
+
     with c1:
         with st.container(border=True):
             st.subheader("Evolución del total de ofertas publicadas")
-            grafico_mensual(vista, AZUL_LINEA, "ofertas_mes")
+            grafico_mensual(
+                vista,
+                AZUL_LINEA,
+                "ofertas_mes"
+            )
+
     with c2:
         with st.container(border=True):
             st.subheader("Evolución del total de postulaciones")
-            grafico_mensual(solicitudes, AZUL_LINEA, "postulaciones_mes")
+            grafico_mensual(
+                solicitudes,
+                AZUL_LINEA,
+                "postulaciones_mes"
+            )
+
+    # ============================================================
+    # FILA 3
+    # ============================================================
 
     detalle_ranking = detalle_ofertas(vista, solicitudes)
+
     c1, c2 = st.columns(2, gap="large")
+
     with c1:
         with st.container(border=True):
             st.subheader("Estado de las ofertas")
             grafico_categorias(
-                vista, "estado_visual", MORADO_BARRA, "estados_ofertas"
+                vista,
+                "estado_visual",
+                MORADO_BARRA,
+                "estados_ofertas"
             )
+
     with c2:
         with st.container(border=True):
             st.subheader("Ofertas con más postulaciones")
+
             ranking = (
-                detalle_ranking.loc[detalle_ranking["Postulaciones"].gt(0)]
+                detalle_ranking.loc[
+                    detalle_ranking["Postulaciones"].gt(0)
+                ]
                 .sort_values(
                     ["Postulaciones", "ID de oferta"],
                     ascending=[False, True]
@@ -973,15 +1100,16 @@ def main():
                 .head(5)
                 .copy()
             )
+
             if ranking.empty:
                 st.info("No hay postulaciones para esta selección.")
             else:
                 from html import escape
                 from textwrap import wrap
-
-                # Cada oferta mantiene su ID, aunque repita el título.
+                
                 ranking = ranking.sort_values(
-                    "Postulaciones", ascending=True
+                    "Postulaciones",
+                    ascending=True
                 ).copy()
 
                 etiquetas = [
@@ -1016,7 +1144,7 @@ def main():
                         hovertemplate=(
                             "%{customdata[0]}<br>"
                             "Postulaciones: %{x}"
-                             "<extra></extra>"
+                            "<extra></extra>"
                         )
                     )
                 )
@@ -1050,7 +1178,6 @@ def main():
                     key="ranking_ofertas",
                     config={"displayModeBar": False}
                 )
-
 
     # ============================================================
     # TIPO DE PUESTO + HERRAMIENTAS
