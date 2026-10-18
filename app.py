@@ -301,7 +301,8 @@ button[role="tab"][aria-selected="true"] {
     color:#FFFFFF !important;
     font-size:24px !important;
     font-weight:700 !important;
-    margin-bottom:4px !important;
+    margin-top:28px !important;
+    margin-bottom:8px !important;
 }
 
 [data-testid="stSidebar"] h3 {
