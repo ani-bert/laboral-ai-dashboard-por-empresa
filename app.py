@@ -1381,19 +1381,18 @@ def detalle_ofertas(
     )
 
 
-    detalle[
-        "Vacantes"
-    ] = (
-        pd.to_numeric(
-            detalle[
-                "vacancies"
-            ],
-            errors="coerce"
-        )
-        .fillna(0)
-        .astype(int)
+    vacantes_num = pd.to_numeric(
+        detalle["vacancies"],
+        errors="coerce"
     )
 
+    detalle["Vacantes"] = vacantes_num.apply(
+        lambda x: (
+            int(x)
+            if pd.notna(x) and x > 0
+            else "No informado"
+        )
+)
 
     detalle[
         "Postulaciones"
