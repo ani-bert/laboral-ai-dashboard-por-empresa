@@ -211,10 +211,16 @@ def calcular_kpis_empresa(
         vacantes_reales = vacantes[
             vacantes.gt(0)
         ].sum()
-    
+
+    postulaciones_por_vacante = (
+        total_postulaciones / vacantes_reales
+        if vacantes_reales > 0
+        else 0
+    )
     return {
         "total_ofertas": int(total_ofertas),
         "ofertas_abiertas": int(ofertas_abiertas),
         "total_postulaciones": int(total_postulaciones),
-        "vacantes_reales": int(vacantes_reales)
+        "vacantes_reales": int(vacantes_reales),
+        "postulaciones_por_vacante": float(postulaciones_por_vacante)
     }

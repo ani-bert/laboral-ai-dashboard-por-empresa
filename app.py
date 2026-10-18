@@ -73,22 +73,27 @@ button[role="tab"][aria-selected="true"] {color:#176B91 !important;}
 }
 
 /* Centrar automáticamente todo el contenido del sidebar */
+/* Centrado vertical del contenido del sidebar */
 [data-testid="stSidebarContent"] {
     display: flex !important;
     flex-direction: column !important;
+    justify-content: center !important;
     min-height: 100vh !important;
+    padding-top: 18px !important;
+    padding-bottom: 18px !important;
+    overflow-y: auto !important;
 }
 
 [data-testid="stSidebarContent"] > div {
-    margin-top: auto !important;
-    margin-bottom: auto !important;
     width: 100% !important;
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
 }
 
+/* Reducir únicamente los espacios verticales */
 [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
-    gap: 1.15rem !important;
+    gap: 0.75rem !important;
 }
-
 [data-testid="stSidebar"] h2 {
     color:#FFFFFF !important;
     font-size:24px !important;
@@ -100,8 +105,8 @@ button[role="tab"][aria-selected="true"] {color:#176B91 !important;}
     color:#FFFFFF !important;
     font-size:20px !important;
     font-weight:700 !important;
-    margin-top:18px !important;
-    margin-bottom:10px !important;
+    margin-top:10px !important;
+    margin-bottom:5px !important;
 }
 
 [data-testid="stSidebar"] label {
@@ -323,9 +328,9 @@ def preparar_modelo(companies, jobs, applications):
     return directorio, ofertas, postulaciones
 
 
-
 def filtrar_datos(ofertas, postulaciones, empresa=TODAS,
                   area=AREA_TODAS, region=REGION_TODAS,
+                  destacada="Todas",
                   inicio=None, fin=None, tipo="Todas"):
     """Un rango filtra por creación de OFERTAS, no por fecha de postulación."""
     mascara = pd.Series(True, index=ofertas.index)
@@ -350,6 +355,33 @@ def filtrar_datos(ofertas, postulaciones, empresa=TODAS,
         )
 
         mascara &= region_oferta.eq(region)
+
+
+    if destacada != "Todas":
+        destacada_oferta = (
+            ofertas["isFeatured"]
+            .astype("string")
+            .str.strip()
+            .str.lower()
+        )
+
+        es_destacada = destacada_oferta.isin(
+            ["true", "1", "1.0", "si", "sí", "yes"]
+        )
+
+        es_no_destacada = destacada_oferta.isin(
+            ["false", "0", "0.0", "no"]
+        )
+
+        if destacada == "Destacadas":
+            mascara &= es_destacada
+
+        elif destacada == "No destacadas":
+            mascara &= es_no_destacada
+
+        elif destacada == "No definido":
+            mascara &= ~(es_destacada | es_no_destacada)
+
     if inicio is not None and fin is not None:
         desde = pd.Timestamp(inicio, tz="UTC")
         hasta = pd.Timestamp(fin, tz="UTC") + pd.Timedelta(days=1)
@@ -365,6 +397,7 @@ def filtrar_datos(ofertas, postulaciones, empresa=TODAS,
         empresa == TODAS
         and area == AREA_TODAS
         and region == REGION_TODAS
+        and destacada == "Todas"
         and inicio is None
         and fin is None
         and tipo == "Todas"
@@ -382,6 +415,13 @@ def filtrar_datos(ofertas, postulaciones, empresa=TODAS,
 def detalle_ofertas(ofertas, postulaciones):
     detalle = ofertas.copy()
     conteos = postulaciones.groupby("job")["_id"].nunique()
+
+    detalle["Vacantes"] = (
+        pd.to_numeric(detalle["vacancies"], errors="coerce")
+        .fillna(0)
+        .astype(int)
+    )
+
     detalle["Postulaciones"] = (
         detalle["_id"].map(conteos).fillna(0).astype(int)
     )
@@ -398,11 +438,18 @@ def detalle_ofertas(ofertas, postulaciones):
         "geographicDepartment": "Ubicación"
     })
     return detalle[[
-        "ID de oferta", "Puesto", "Empresa", "Área", "Modalidad",
-        "Ubicación", "Estado", "Fecha de creación", "Vencimiento",
+        "ID de oferta",
+        "Puesto",
+        "Empresa",
+        "Área",
+        "Modalidad",
+        "Ubicación",
+        "Estado",
+        "Vacantes",
+        "Fecha de creación",
+        "Vencimiento",
         "Postulaciones"
     ]]
-
 
 # Reglas transparentes para agrupar distintas formas de escribir un mismo
 # requisito. Una frase puede pertenecer a más de una categoría.
@@ -566,15 +613,45 @@ def grafico_mapa_ofertas(ofertas):
         st.info("Las ofertas seleccionadas no tienen departamento registrado.")
         return
 
-    conteos = (
-        departamentos.map(normalizar_termino)
+    base_mapa = ofertas.copy()
+
+    base_mapa["Departamento"] = (
+        texto_limpio(base_mapa["geographicDepartment"])
+        .map(normalizar_termino)
+    )
+
+    base_mapa["vacancies"] = pd.to_numeric(
+        base_mapa["vacancies"],
+        errors="coerce"
+    ).fillna(0)
+
+    ofertas_dep = (
+        base_mapa["Departamento"]
+        .dropna()
         .value_counts()
         .rename_axis("Departamento")
         .reset_index(name="Ofertas")
     )
 
+    vacantes_dep = (
+        base_mapa
+        .dropna(subset=["Departamento"])
+        .groupby("Departamento", as_index=False)["vacancies"]
+        .sum()
+        .rename(columns={"vacancies": "Vacantes"})
+    )
+
+    conteos = ofertas_dep.merge(
+        vacantes_dep,
+        on="Departamento",
+        how="left"
+    )
+
+    conteos["Vacantes"] = conteos["Vacantes"].fillna(0)
+
     try:
         geojson = cargar_geojson_peru()
+
         for feature in geojson.get("features", []):
             propiedades = feature.setdefault("properties", {})
             propiedades["DEPARTAMENTO_NORMALIZADO"] = normalizar_termino(
@@ -594,8 +671,14 @@ def grafico_mapa_ofertas(ofertas):
             ]
         }).drop_duplicates("Departamento")
 
-        mapa = mapa.merge(conteos, on="Departamento", how="left")
-        mapa["Ofertas"] = mapa["Ofertas"].fillna(0).astype(int)
+        mapa = mapa.merge(
+            conteos,
+            on="Departamento",
+            how="left"
+        )
+
+        mapa["Ofertas"] = mapa["Ofertas"].fillna(0)
+        mapa["Vacantes"] = mapa["Vacantes"].fillna(0)
 
         fig = px.choropleth(
             mapa,
@@ -604,20 +687,28 @@ def grafico_mapa_ofertas(ofertas):
             featureidkey="properties.DEPARTAMENTO_NORMALIZADO",
             color="Ofertas",
             color_continuous_scale=[
-                [0.00, "#EEF2F6"], [0.15, "#D4F0F3"],
-                [0.40, "#66C7D1"], [0.70, "#0A99AD"],
+                [0.00, "#EEF2F6"],
+                [0.15, "#D4F0F3"],
+                [0.40, "#66C7D1"],
+                [0.70, "#0A99AD"],
                 [1.00, "#077F8F"]
             ],
             hover_name="Nombre",
             hover_data={
-                "Ofertas": True, "Departamento": False, "Nombre": False
+                "Ofertas": True,
+                "Vacantes": True,
+                "Departamento": False,
+                "Nombre": False
             }
         )
         fig.update_traces(
             marker_line_color="#FFFFFF",
             marker_line_width=1.2,
             hovertemplate=(
-                "<b>%{hovertext}</b><br>Ofertas: <b>%{z}</b><extra></extra>"
+                "<b>%{hovertext}</b><br>"
+                "Ofertas: <b>%{z}</b><br>"
+                "Vacantes: <b>%{customdata[1]}</b>"
+                "<extra></extra>"
             )
         )
         fig.update_geos(
@@ -787,7 +878,7 @@ def cargar_datos_empresa():
     tablas = constructor()
     # Usar las tablas de origen limpias; no un cruce que multiplique ofertas.
     modelo = preparar_modelo(tablas[0], tablas[1], tablas[2])
-    return (*modelo, pd.Timestamp.now(tz="UTC"))
+    return (*modelo, pd.Timestamp.now(tz="America/Lima"))
 
 
 def limpiar_filtros_empresa():
@@ -796,11 +887,13 @@ def limpiar_filtros_empresa():
     st.session_state["area_filtro"] = AREA_TODAS
     st.session_state["region_filtro"] = REGION_TODAS
     st.session_state["periodo_filtro"] = "Completo"
+    st.session_state["destacada_filtro"] = "Todas"
     for clave in ("fecha_desde", "fecha_hasta"):
         st.session_state.pop(clave, None)
     st.session_state["busqueda_directorio"] = ""
     st.session_state["origen_directorio"] = "Todas"
     st.session_state["pagina_directorio"] = 1
+    
 
 
 def cambiar_empresa():
@@ -945,6 +1038,12 @@ def main():
             key="region_filtro",
             format_func=lambda valor: "Todas" if valor == REGION_TODAS else valor
         )
+
+        destacada = st.selectbox(
+            "Oferta destacada",
+            ["Todas", "Destacadas", "No destacadas", "No definido"],
+            key="destacada_filtro"
+        )
         hoy = pd.Timestamp.now(tz="UTC").normalize()
         inicio = fin = None
         if periodo == "Personalizado":
@@ -971,14 +1070,22 @@ def main():
             "Actualizar datos", on_click=cargar_datos_empresa.clear,
             use_container_width=True
         )
-        st.caption(f"Última carga: {actualizado:%d/%m/%Y %H:%M} UTC")
+        st.caption(f"Última carga: {actualizado:%d/%m/%Y %H:%M} - Hora Perú")
 
     if inicio is not None and inicio > fin:
         st.warning("La fecha inicial no puede ser posterior a la fecha final.")
         st.stop()
 
     vista, solicitudes = filtrar_datos(
-        ofertas, postulaciones, empresa, area, region, inicio, fin, tipo
+        ofertas,
+        postulaciones,
+        empresa,
+        area,
+        region,
+        destacada,
+        inicio,
+        fin,
+        tipo
     )
     titulo = (
         {"Todas":"Panorama general de empresas", "Internas":"Ofertas internas",
@@ -1289,10 +1396,11 @@ def main():
 
     if region == REGION_TODAS:
         with st.container(border=True):
-            st.subheader("Distribución geográfica de las ofertas")
+            st.subheader("Distribución geográfica de ofertas y vacantes")
             st.caption(
-            "Cantidad de ofertas laborales por departamento del Perú."
+            "Visualiza la cantidad de ofertas publicadas y las vacantes registradas por departamento del Perú."
             )
+
             grafico_mapa_ofertas(vista)
 
 
