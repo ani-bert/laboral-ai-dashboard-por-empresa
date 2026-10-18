@@ -387,7 +387,9 @@ def constructor():
         "verificationStatus",
         "isExternalOffer",
         "externalCompanyName",
-        "requirements"
+        "requirements","vacancies",
+        "workExperience",
+        "isFeatured"
     ]
 
     # ========================================================

@@ -196,9 +196,25 @@ def calcular_kpis_empresa(
         total_postulaciones = (
             postulaciones[columna_id_postulacion].nunique()
         )
+# ========================================================
+# VACANTES REALES
+# ========================================================
 
+    if "vacancies" not in ofertas.columns:
+        vacantes_reales = 0
+    else:
+        vacantes = pd.to_numeric(
+            ofertas["vacancies"],
+            errors="coerce"
+        )
+
+        vacantes_reales = vacantes[
+            vacantes.gt(0)
+        ].sum()
+    
     return {
         "total_ofertas": int(total_ofertas),
         "ofertas_abiertas": int(ofertas_abiertas),
-        "total_postulaciones": int(total_postulaciones)
+        "total_postulaciones": int(total_postulaciones),
+        "vacantes_reales": int(vacantes_reales)
     }
